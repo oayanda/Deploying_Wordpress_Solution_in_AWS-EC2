@@ -1,5 +1,5 @@
 Step 1 — Prepare a Web Server.
-Lunch an ec2 instance to serve as the Redhat web server. Create 3 volumes in the same AZ as your Web Server EC2, each of 10 GiB.
+Lunch an ec2 instance to serve as the Redhat web server. Create 3 volumes (10GB each) in the same AZ to be attached to Web Server EC2 instance.
 ![](images/1.png)
 
 Create the 3 EBS Volumes in the same availablity zone(AZ).
@@ -20,17 +20,19 @@ lsblk
 ls /dev | grep xvd
 ```
 ![](images/5.png)
-Use df -h command to see all mounts and free space on your server.
+Use df -h command to see all mounts and free space on your server. Notice ***xvd2*** is the only partition visible and this created automatically during the instance creation.
 ```bash
 df -h
 ```
 ![](images/6.png)
-Use gdisk utility to create a single GPT partition on each of the **3** volumes.
+Now, let's use gdisk utility to create a single GPT Linux lvm partition on each of the **3** volumes so that it can be used by the web server instance.
 
 ```bash
 sudo gdisk /dev/xvdg
 ```
 ![](images/7.png)
+***Repeat above steps for the remaining 2 volumes.***
+
 Verfiy the partitions are configured as required on each of the 3 disks.
 ```bash
 lsblk
@@ -300,3 +302,19 @@ sudo systemctl restart mysqld
 sudo systemctl enable mysqld
 ```
 ![](images/43.png) 
+
+Configure DB to work with WordPress.
+```bash
+sudo mysql
+CREATE DATABASE wordpress;
+CREATE USER `myuser`@`<Web-Server-Private-IP-Address>` IDENTIFIED BY 'mypass';
+GRANT ALL ON wordpress.* TO 'myuser'@'<Web-Server-Private-IP-Address>';
+FLUSH PRIVILEGES;
+SHOW DATABASES;
+exit
+```
+![](images/44.png)
+Configure WordPress to connect to remote database.
+Make sure database private ip is binded only.
+![](images/45.png)
+Install MySQL client and test that you can connect from your Web Server to your DB server by using mysql-client
