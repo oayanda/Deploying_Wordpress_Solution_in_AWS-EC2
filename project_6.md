@@ -8,8 +8,6 @@ Create the 3 EBS Volumes in the same availablity zone(AZ).
 Attach the 3 ebs volumes to the ec2 instance.
 ![](images/3.png)
 
-Verify all volumes are attached to the AWS ec2 instance.
-![](images/4.png)
 
 Open up the Linux terminal to begin configuration.
 In the linux terminal, verify the volumes as well as the names/labels.
@@ -20,7 +18,7 @@ lsblk
 ls /dev | grep xvd
 ```
 ![](images/5.png)
-Use df -h command to see all mounts and free space on your server. Notice ***xvd2*** is the only partition visible and this created automatically during the instance creation.
+Use df -h command to see all mounts and free space on your server. Notice ***xvd2*** is the only partition visible and this was created automatically during the instance creation.
 ```bash
 df -h
 ```
@@ -38,21 +36,21 @@ Verfiy the partitions are configured as required on each of the 3 disks.
 lsblk
 ```
 ![](images/8.png)
-Install lvm2 package using sudo yum install lvm2 - which is a is a device mapper framework that provides logical volume management for the Linux kernel.
+To check for available partitions, Install lvm2 package using sudo yum install lvm2 (Linux Volume Manager) - which is a is a device mapper framework that provides logical volume management for the Linux kernel.
 ```bash
 sudo yum install lvm2
 ```
 ![](images/9.png)
 Run sudo lvmdiskscan command to check for available partitions.
 ```bash
-sudo lvdiskscan
+sudo lvmdiskscan
 ```
 ![](images/10.png)
 Prepare the disks - Use pvcreate utility to mark each of 3 disks as physical volumes (PVs) to be used by LVM.
 ```bash
-sudo pvcreate /dev/xvdf1
 sudo pvcreate /dev/xvdg1
-sudo pvcreate /dev/xvdh1
+sudo pvcreate /dev/xvdf2
+sudo pvcreate /dev/xvdh3
 ```
 ![](images/11.png)
 Verify.
@@ -76,13 +74,19 @@ sudo lvcreate -n logs-lv -L 14G webdata-vg
 ![](images/14.png)
 Let's verify the entire setup
 ```bash
-sudo lsblk
+sudo lvs
+```
+![](images/140.png)
+
+Verify the entire setup. 
+```bash
+sudo vgdisplay -v 
 ```
 ![](images/15.png)
 Use mkfs.ext4 to format the logical volumes with ext4 filesystem
 ```bash
-sudo mkfs -t ext4 /dev/webdata-vg/apps-lv
-sudo mkfs -t ext4 /dev/webdata-vg/logs-lv
+sudo mkfs  ext4 /dev/webdata-vg/apps-lv
+sudo mkfs  ext4 /dev/webdata-vg/logs-lv
 ```
 ![](images/16.png)
 Create /var/www/html directory to store .website files
@@ -111,15 +115,23 @@ Restore log files back into /var/log directory.
 ```bash
 sudo rsync -av /home/recovery/logs/. /var/log
 ```
+Verify mount
+```bash
+sudo lsblk
+```
+![](images/160.png)
+
+**Upate UUID**
+
 Update /etc/fstab file so that the mount configuration will persist after restart of the server.
 Check the UUID
 ```bash
 sudo blkid
 ```
 ![](images/18.png)
-Edit the /etc/fstab/ with the UUID
+Edit the /etc/fstab/ by updating the UUID with the above.
 ```bash
-sudo nano /etc/fstab/
+sudo vi /etc/fstab/
 ```
 ![](images/19.png)
 Test the configuration and reload the daemon.
@@ -134,16 +146,14 @@ df -h
 ```
  ![](images/21.png)
 
- Prepare the Database Server.
+ **Prepare the Database Server.**
+ Repeat similar setups above to setup the Database Server.
  Lunch another ec2 instance for the Database and attached 3 volumns.
  ![](images/22.png)
 
 Verify volumn creation and attachment.
 ```bash
 lsblk
-```
-```bash
-df -h
 ```
 ![](images/23.png)
 Create single partitions on all the 3 volumes using the gdisk utility.
@@ -153,7 +163,7 @@ sudo gdisk /dev/xvdf
 ![](images/24.png)
 Install lvm2 package
 ```bash
-sudo yum install lvm2
+sudo yum install lvm2 -y
 ```
 ![](images/25.png)
 Run sudo lvmdiskscan command to check for available partitions.
@@ -163,9 +173,7 @@ sudo lvmdiskscan
 ![](images/26.png)
 Use pvcreate utility to mark each of 3 disks as physical volumes (PVs) to be used by LVM.
 ```bash
-sudo pvcreate /dev/xvdf2
-sudo pvcreate /dev/xvdg2
-sudo pvcreate /dev/xvdh2
+sudo pvcreate /dev/xvdf1 /dev/xvdg2 /dev/xvdh3
 ```
 ![](images/27.png)
 Verify that your Physical volume has been created successfully by running sudo pvs
@@ -178,15 +186,15 @@ Use vgcreate utility to add all 3 PVs to a volume group (VG). Name the VG webdat
 sudo vgcreate webdata-vg /dev/xvdh2 /dev/xvdg2 /dev/xvdf2
 ```
 ![](images/29.png)
-Verify that your VG has been created successfully by running sudo vgs.
+Verify that your Vitural Group has been created successfully by running sudo vgs.
 ```bash
 sudo vgs
 ```
 ![](images/30.png)
 Use lvcreate utility to create 2 logical volumes.
 ```bash
-sudo lvcreate -n db-lv -L 14G webdata-vg
-sudo lvcreate -n logs-lv -L 14G webdata-vg
+sudo lvcreate -n db-lv -L 14G database-vg
+sudo lvcreate -n logs-lv -L 14G database-vg
 ```
 ```bash
 sudo lvs
@@ -194,10 +202,10 @@ sudo lvs
 ![](images/31.png)
 Verify the entire setup
 ```bash
-sudo vgdisplay -v #view complete setup - VG, PV, and LV
-sudo lsblk 
+sudo vgdisplay -v 
 ```
 ![](images/32.png)
+
 Use mkfs.ext4 to format the logical volumes with ext4 filesystem
 ```bash
 sudo mkfs -t ext4 /dev/webdata-vg/db-lv
@@ -211,7 +219,7 @@ sudo mkdir -p /home/recovery/logs
 ```
 Mount  db-lv logical volume
 ```bash
-sudo mount /dev/webdata-vg/db-lv /db
+sudo mount /dev/database-vg/db-lv /db
 ```
 Use rsync utility to backup all the files in the log directory /var/log into /home/recovery/logs
 ```bash
@@ -219,16 +227,21 @@ sudo rsync -av /var/log/. /home/recovery/logs/
 ```
 Mount /var/log on logs-lv logical volume.
 ```bash
-sudo mount /dev/webdata-vg/logs-lv /var/log
+sudo mount /dev/database-vg/logs-lv /var/log
 ```
 Restore
 ```bash
 sudo rsync -av /home/recovery/logs/. /var/log
 ```
+verify
+```bash
+lsblk
+```
+![](images/340.png)
 Update UUID in /etc/fstab.
 View UUID
 ```bash
-sudo blkid
+blkid
 ```
 ![](images/35.png)
 ```bash
@@ -284,12 +297,19 @@ Download wordpress and copy wordpress to var/www/html
 ```bash
   mkdir wordpress && cd wordpress
   sudo wget http://wordpress.org/latest.tar.gz
-  sudo tar xzvf latest.tar.gz
+  sudo mv wordpress /var/www/html
+  sudo tar -xzvf latest.tar.gz
   sudo rm -rf latest.tar.gz
-  sudo cp wordpress/wp-config-sample.php wordpress/wp-config.php
   sudo cp -R wordpress /var/www/html/
-```
-![](images/42.png) 
+  sudo cp wordpress/wp-config-sample.php wordpress/wp-config.php
+ ```
+Configure SELinux Policies.
+```bash
+sudo chown -R apache:apache /var/www/html/wordpress
+  sudo chcon -t httpd_sys_rw_content_t /var/www/html/wordpress -R
+  sudo setsebool -P httpd_can_network_connect=1
+  ```
+  ![](images/420.png) 
 Install MySQL on your DB Server EC2.
 ```bash
 sudo yum update
@@ -306,7 +326,7 @@ sudo systemctl enable mysqld
 Configure DB to work with WordPress.
 ```bash
 sudo mysql
-CREATE DATABASE wordpress;
+create database wordpress;
 CREATE USER `myuser`@`<Web-Server-Private-IP-Address>` IDENTIFIED BY 'mypass';
 GRANT ALL ON wordpress.* TO 'myuser'@'<Web-Server-Private-IP-Address>';
 FLUSH PRIVILEGES;
@@ -315,6 +335,23 @@ exit
 ```
 ![](images/44.png)
 Configure WordPress to connect to remote database.
-Make sure database private ip is binded only.
+Make sure database private ip is only allowed in the security group.
 ![](images/45.png)
-Install MySQL client and test that you can connect from your Web Server to your DB server by using mysql-client
+Install MySQL client on the web server and test that you can connect from your Web Server to your DB server by using mysql-client.
+
+```bash
+sudo yum install mysql -y
+sudo mysql -u myuser -p -h <DB-Server-Private-IP-address>
+```
+![](images/50.png)
+Change permissions and configuration so Apache could use WordPress:
+![](images/52.png)
+![](images/51.png)
+Allow port 80 in the security group on your web server.
+![](images/53.png)
+
+View the wordpress in the browser. Use the public ip address.
+```bash
+http://3.95.193.156/wordpress/
+```
+![](images/56.png)
